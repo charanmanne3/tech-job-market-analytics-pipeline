@@ -1,0 +1,79 @@
+version: "3.8"
+
+x-common-env: &common-env
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_NAME: job_market
+  DB_USER: postgres
+  DB_PASSWORD: postgres
+
+services:
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: jm_postgres
+    environment:
+      POSTGRES_DB: job_market
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      retries: 5
+      start_period: 10s
+
+  # ── Airflow ───────────────────────────────────────────────────────────────
+  airflow:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.airflow
+    container_name: jm_airflow
+    environment:
+      <<: *common-env
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:postgres@postgres:5432/job_market
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      PYTHONPATH: /opt/airflow/app
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../pipelines/airflow_dag.py:/opt/airflow/dags/airflow_dag.py
+      - ..:/opt/airflow/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      bash -c "
+        airflow db migrate &&
+        airflow users create --username admin --password admin
+          --firstname Admin --lastname User --role Admin
+          --email admin@example.com || true &&
+        airflow scheduler &
+        airflow webserver
+      "
+
+  # ── Streamlit ─────────────────────────────────────────────────────────────
+  streamlit:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.app
+    container_name: jm_streamlit
+    environment:
+      <<: *common-env
+    ports:
+      - "8501:8501"
+    volumes:
+      - ../data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: streamlit run dashboard/streamlit_app.py --server.address 0.0.0.0
+
+volumes:
+  pgdata:

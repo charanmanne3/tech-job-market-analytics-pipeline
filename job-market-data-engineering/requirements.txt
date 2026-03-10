@@ -1,0 +1,15 @@
+# Core
+pandas>=2.2,<3
+pyarrow>=16.0,<18
+requests>=2.31,<3
+
+# Database
+sqlalchemy>=2.0,<3
+psycopg2-binary>=2.9,<3
+
+# Dashboard
+streamlit>=1.35,<2
+plotly>=5.22,<6
+
+# Orchestration (Airflow container only)
+apache-airflow>=2.9,<3
