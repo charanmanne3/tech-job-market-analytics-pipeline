@@ -1,196 +1,226 @@
 # Tech Job Market Analytics Pipeline
 
-A production-style data engineering project that collects tech job postings from public APIs, processes them through a multi-layer data lake, stores results in PostgreSQL, orchestrates workflows with Apache Airflow, and visualises insights on a Streamlit dashboard.
+An end-to-end **Data Engineering pipeline** that collects, processes, and analyzes tech job market data using **Apache Airflow, Docker, Python, and PostgreSQL**.
+
+This project demonstrates how to build a production-style **ETL pipeline** that ingests job postings from public APIs, transforms the data, and loads it into a database for analytics.
 
 ---
 
-## Architecture
+## Project Architecture
 
-```
-                    ┌──────────────┐   ┌──────────────┐
-                    │ Remotive API │   │ RemoteOK API │
-                    └──────┬───────┘   └──────┬───────┘
-                           │                  │
-                           ▼                  ▼
-                    ┌─────────────────────────────────┐
-                    │     DATA INGESTION              │
-                    │  fetch_jobs.py                   │
-                    └──────────────┬──────────────────┘
-                                   │
-                    ┌──────────────▼──────────────────┐
-                    │     DATA LAKE — RAW LAYER       │
-                    │  data/raw/raw_jobs.json          │
-                    │  data/raw/raw_jobs.parquet       │
-                    └──────────────┬──────────────────┘
-                                   │
-                    ┌──────────────▼──────────────────┐
-                    │     TRANSFORMATION               │
-                    │  clean_jobs.py                    │
-                    │  skill_extraction.py              │
-                    └──────────────┬──────────────────┘
-                                   │
-                    ┌──────────────▼──────────────────┐
-                    │     DATA LAKE — PROCESSED LAYER  │
-                    │  data/processed/clean_jobs.parquet│
-                    └──────────────┬──────────────────┘
-                                   │
-                  ┌────────────────┼────────────────┐
-                  ▼                                 ▼
-        ┌─────────────────┐              ┌─────────────────┐
-        │   PostgreSQL     │              │   Streamlit      │
-        │  (jobs, skills,  │              │   Dashboard      │
-        │   job_skills)    │              │   :8501           │
-        └─────────────────┘              └─────────────────┘
-                  ▲
-                  │
-        ┌─────────────────┐
-        │  Apache Airflow  │
-        │  (daily DAG)     │
-        │  :8080           │
-        └─────────────────┘
-```
+API Sources
+⬇
+Airflow ETL Pipeline
+⬇
+Data Transformation
+⬇
+PostgreSQL Database
+⬇
+Analytics / Dashboard
+
+---
+
+## Tech Stack
+
+* **Python**
+* **Apache Airflow**
+* **Docker**
+* **PostgreSQL**
+* **Pandas**
+* **Requests**
+* **Streamlit (for visualization)**
 
 ---
 
 ## Project Structure
 
 ```
-job-market-data-engineering/
+tech-job-market-analytics-pipeline
+│
 ├── config/
-│   └── config.py                  # Paths, DB creds (env vars), API URLs
-├── utils/
-│   └── logger.py                  # Centralized logging with file + console
+│   └── settings.py
+│
 ├── data/
-│   ├── raw/                       # Raw JSON + Parquet from APIs
-│   ├── processed/                 # Cleaned Parquet + CSV
-│   └── analytics/                 # Aggregated datasets
+│   ├── raw/
+│   └── processed/
+│
 ├── data_ingestion/
-│   └── fetch_jobs.py              # API fetchers with retry logic
+│   └── fetch_jobs.py
+│
 ├── transformations/
-│   ├── clean_jobs.py              # Full cleaning pipeline
-│   └── skill_extraction.py        # Regex keyword extraction (55+ skills)
+│   └── clean_jobs.py
+│
 ├── database/
-│   ├── schema.sql                 # PostgreSQL DDL (3 tables)
-│   └── load_data.py               # SQLAlchemy upsert loader
+│   └── load_data.py
+│
 ├── pipelines/
-│   └── airflow_dag.py             # Daily Airflow DAG (extract→transform→load)
+│   └── airflow_dag.py
+│
 ├── dashboard/
-│   └── streamlit_app.py           # Interactive analytics dashboard
+│   └── streamlit_app.py
+│
 ├── docker/
-│   ├── docker-compose.yml         # Postgres + Airflow + Streamlit
-│   ├── Dockerfile.airflow
-│   └── Dockerfile.app
-├── logs/                          # Runtime logs (auto-created)
+│   └── Dockerfile
+│
+├── docker-compose.yml
 ├── requirements.txt
-├── .env.example
-├── .gitignore
 └── README.md
 ```
 
 ---
 
-## Tech Stack
+## Pipeline Workflow
 
-| Layer          | Technology             |
-|----------------|------------------------|
-| Language       | Python 3.11            |
-| Processing     | Pandas + PyArrow       |
-| Storage Format | Parquet (data lake)    |
-| Database       | PostgreSQL 16          |
-| Orchestration  | Apache Airflow 2.9     |
-| Dashboard      | Streamlit + Plotly     |
-| Containers     | Docker & Compose       |
+The Airflow DAG runs a **daily ETL pipeline** consisting of three steps:
+
+### 1. Extract
+
+Fetch job postings from public APIs such as:
+
+* Remotive API
+* RemoteOK API
+
+Raw data is saved to:
+
+```
+data/raw/raw_jobs.json
+data/raw/raw_jobs.parquet
+```
 
 ---
 
-## Data Lake Design
+### 2. Transform
+
+The transformation step:
+
+* Cleans raw data
+* Standardizes schema
+* Extracts important fields such as:
+
+  * Job title
+  * Company
+  * Location
+  * Skills
+  * Salary
+
+Processed data is saved to:
 
 ```
-data/raw/        → Raw API payloads (JSON + Parquet)
-data/processed/  → Cleaned, normalised, skill-tagged (Parquet + CSV)
-data/analytics/  → Aggregated datasets for dashboards
+data/processed/clean_jobs.parquet
 ```
-
-All processed data is stored in **Parquet** format for columnar efficiency, type preservation, and compression.  CSV copies are kept for backward-compatibility.
 
 ---
 
-## Setup & Usage
+### 3. Load
 
-### Prerequisites
+The final step loads processed data into a **PostgreSQL database**.
 
-- Docker & Docker Compose, **or**
-- Python 3.11+ for local development
+This allows the data to be used for:
 
-### Option 1 — Docker (recommended)
+* analytics
+* dashboards
+* reporting
 
-```bash
-cd docker
-docker-compose up --build -d
+---
+
+## Running the Project
+
+### 1. Clone the repository
+
+```
+git clone https://github.com/charanmanne3/tech-job-market-analytics-pipeline.git
+cd tech-job-market-analytics-pipeline
 ```
 
-| Service    | URL                          | Credentials   |
-|------------|------------------------------|---------------|
-| Airflow    | http://localhost:8080         | admin / admin |
-| Streamlit  | http://localhost:8501         | —             |
-| PostgreSQL | localhost:5432               | postgres / postgres |
+---
 
-### Option 2 — Local
+### 2. Start the pipeline
 
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+```
+docker compose up --build
+```
 
-# 1. Ingest
-python data_ingestion/fetch_jobs.py
+---
 
-# 2. Transform
-python transformations/clean_jobs.py
+### 3. Open Airflow
 
-# 3. Load (requires running Postgres)
-python database/load_data.py
+Airflow UI will be available at:
 
-# 4. Dashboard
+```
+http://localhost:8080
+```
+
+Default credentials:
+
+```
+username: airflow
+password: airflow
+```
+
+---
+
+### 4. Run the DAG
+
+Enable the DAG:
+
+```
+job_market_pipeline
+```
+
+Then trigger the pipeline.
+
+---
+
+## Dashboard (Optional)
+
+Run the Streamlit dashboard to explore job data:
+
+```
 streamlit run dashboard/streamlit_app.py
 ```
 
----
+This dashboard shows:
 
-## Pipeline Steps
-
-| Step      | Script                            | Output                          |
-|-----------|-----------------------------------|---------------------------------|
-| Extract   | `data_ingestion/fetch_jobs.py`    | `data/raw/raw_jobs.parquet`     |
-| Transform | `transformations/clean_jobs.py`   | `data/processed/clean_jobs.parquet` |
-| Load      | `database/load_data.py`           | PostgreSQL `jobs`, `skills`, `job_skills` |
-| Visualise | `dashboard/streamlit_app.py`      | Interactive Streamlit dashboard |
+* Job counts
+* Top hiring companies
+* Most requested skills
+* Market trends
 
 ---
 
-## Dashboard
+## Example Use Cases
 
-Five sections in a single scrollable page:
+This dataset can be used to analyze:
 
-1. **Metric Cards** — Total Jobs, Companies, Locations, Avg Skills, Salary Count
-2. **Jobs by Location** — Top locations + top companies bar charts + timeline
-3. **Top Skills** — Ranked bar chart, co-occurrence pairs, stats table
-4. **Salary Distribution** — Histogram overlay, dumbbell ranges, scatter plot
-5. **Remote vs Onsite** — Donut chart, breakdown cards, remote locations
+* Most in-demand programming languages
+* Remote vs on-site jobs
+* Hiring trends by company
+* Salary distributions
+* Skills demand trends
 
 ---
 
 ## Future Improvements
 
-- **Kafka streaming** — real-time ingestion pipeline
-- **dbt** — SQL-based transformation layer with tests
-- **Great Expectations** — data quality checks
-- **CI/CD** — GitHub Actions for lint + test + deploy
-- **Incremental loads** — only fetch new postings since last run
-- **Additional sources** — LinkedIn, Indeed, Glassdoor
-- **Alerting** — Slack/email on pipeline failures
+Possible improvements include:
+
+* Real-time streaming pipelines
+* Kafka integration
+* Data warehouse integration (Snowflake / BigQuery)
+* Automated data quality checks
+* CI/CD pipeline
 
 ---
 
-## License
+## Author
 
-MIT
+**Sree Charan Sai Manne**
+
+Master's in Computer Science
+Aspiring Data Engineer
+
+GitHub:
+https://github.com/charanmanne3
+
+LinkedIn:
+[www.linkedin.com/in/manne-sree-charan-sai-777196217](http://www.linkedin.com/in/manne-sree-charan-sai-777196217)
