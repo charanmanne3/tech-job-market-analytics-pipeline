@@ -1,12 +1,12 @@
-FROM apache/airflow:2.9.1-python3.11
+FROM apache/airflow:2.9.1-python3.10
 
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential libpq-dev && rm -rf /var/lib/apt/lists/*
 USER airflow
 
-COPY requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
+COPY requirements-pipeline.txt /tmp/requirements-pipeline.txt
+RUN pip install --no-cache-dir -r /tmp/requirements-pipeline.txt
 
 WORKDIR /opt/airflow/app
 COPY . .

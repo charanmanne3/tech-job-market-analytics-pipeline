@@ -1,4 +1,4 @@
-# Core
+# Streamlit dashboard dependencies
 pandas>=1.5
 pyarrow>=10.0
 requests>=2.28

@@ -23,16 +23,6 @@ default_args = {
     "retry_delay": timedelta(minutes=5),
 }
 
-dag = DAG(
-    dag_id="job_market_pipeline",
-    default_args=default_args,
-    description="Daily ETL for tech job market analytics",
-    schedule_interval="0 6 * * *",
-    start_date=datetime(2025, 1, 1),
-    catchup=False,
-    tags=["data-engineering", "job-market"],
-)
-
 
 def _extract(**ctx):
     from data_ingestion.fetch_jobs import run_ingestion
@@ -54,8 +44,29 @@ def _load(**ctx):
     run_load()
 
 
-extract_task = PythonOperator(task_id="extract_jobs", python_callable=_extract, dag=dag)
-transform_task = PythonOperator(task_id="transform_jobs", python_callable=_transform, dag=dag)
-load_task = PythonOperator(task_id="load_jobs", python_callable=_load, dag=dag)
+with DAG(
+    dag_id="job_market_pipeline",
+    default_args=default_args,
+    description="Daily ETL for tech job market analytics",
+    schedule="0 6 * * *",
+    start_date=datetime(2025, 1, 1),
+    catchup=False,
+    tags=["data-engineering", "job-market"],
+) as dag:
 
-extract_task >> transform_task >> load_task
+    extract_task = PythonOperator(
+        task_id="extract_jobs",
+        python_callable=_extract,
+    )
+
+    transform_task = PythonOperator(
+        task_id="transform_jobs",
+        python_callable=_transform,
+    )
+
+    load_task = PythonOperator(
+        task_id="load_jobs",
+        python_callable=_load,
+    )
+
+    extract_task >> transform_task >> load_task
