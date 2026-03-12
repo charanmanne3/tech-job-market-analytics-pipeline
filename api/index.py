@@ -97,6 +97,8 @@ def _airflow_request(path: str, params: dict | None = None) -> dict:
             url = f"{url}?{urlencode(params, doseq=True)}"
 
         req = Request(url)
+        req.add_header("User-Agent", "Mozilla/5.0 (compatible; TechJobMarketBot/1.0)")
+        req.add_header("Accept", "application/json, text/plain, */*")
         if username:
             token = base64.b64encode(f"{username}:{password}".encode()).decode("utf-8")
             req.add_header("Authorization", f"Basic {token}")
