@@ -40,7 +40,8 @@ st.set_page_config(
 # ─────────────────────────────────────────────────────────────────────────────
 # CSS — dark metric cards, full-width, spacing
 # ─────────────────────────────────────────────────────────────────────────────
-st.markdown("""<style>
+st.markdown(
+    """<style>
 .block-container{padding:2rem 2.5rem;max-width:100%}
 .metric-card{
     background:linear-gradient(135deg,#1e293b 0%,#334155 100%);
@@ -59,7 +60,9 @@ st.markdown("""<style>
 .metric-card.rose{border-top:4px solid #f43f5e}
 .sh{font-size:1.5rem;font-weight:700;margin-top:2.5rem;margin-bottom:.2rem}
 .ss{font-size:.95rem;color:#94a3b8;margin-bottom:1.2rem}
-</style>""", unsafe_allow_html=True)
+</style>""",
+    unsafe_allow_html=True,
+)
 
 
 def mc(icon, val, label, accent="blue"):
@@ -72,8 +75,13 @@ def sh(t, sub=""):
         st.markdown(f'<div class="ss">{sub}</div>', unsafe_allow_html=True)
 
 
-DARK = dict(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(size=13, color="#e2e8f0"), margin=dict(l=10, r=30, t=50, b=30))
+DARK = dict(
+    template="plotly_dark",
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    font=dict(size=13, color="#e2e8f0"),
+    margin=dict(l=10, r=30, t=50, b=30),
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -86,7 +94,9 @@ def load_data():
     if CLEAN_CSV_PATH.exists():
         return pd.read_csv(CLEAN_CSV_PATH)
     try:
-        from sqlalchemy import create_engine, text as sa_text
+        from sqlalchemy import create_engine
+        from sqlalchemy import text as sa_text
+
         eng = create_engine(DATABASE_URL)
         with eng.connect() as c:
             r = pd.read_sql(sa_text("SELECT * FROM jobs"), c)
@@ -109,7 +119,9 @@ def skill_ranks(frame):
 
 df = load_data()
 if df.empty:
-    st.error("**No data found.** Run the pipeline first:\n\n```bash\npython data_ingestion/fetch_jobs.py\npython transformations/clean_jobs.py\n```")
+    st.error(
+        "**No data found.** Run the pipeline first:\n\n```bash\npython data_ingestion/fetch_jobs.py\npython transformations/clean_jobs.py\n```"
+    )
     st.stop()
 
 df["posted_date"] = pd.to_datetime(df["posted_date"], errors="coerce")
@@ -128,7 +140,12 @@ with st.sidebar:
     vd = df["posted_date"].dropna()
     dr = None
     if not vd.empty:
-        dr = st.date_input("Posted between", value=(vd.min().date(), vd.max().date()), min_value=vd.min().date(), max_value=vd.max().date())
+        dr = st.date_input(
+            "Posted between",
+            value=(vd.min().date(), vd.max().date()),
+            min_value=vd.min().date(),
+            max_value=vd.max().date(),
+        )
     st.markdown("---")
     st.caption("Tech Job Market Analytics v1.0")
 
@@ -148,8 +165,13 @@ avg_sk = fd["skill_count"].mean() if "skill_count" in fd.columns else 0
 # ═════════════════════════════════════════════════════════════════════════════
 #  SECTION 1 — HEADER + METRIC CARDS
 # ═════════════════════════════════════════════════════════════════════════════
-st.markdown("<h1 style='text-align:center;margin-bottom:.2rem'>📊 Tech Job Market Analytics</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center;color:#94a3b8;margin-bottom:2rem'>Real-time insights from tech job postings collected via public APIs</p>", unsafe_allow_html=True)
+st.markdown(
+    "<h1 style='text-align:center;margin-bottom:.2rem'>📊 Tech Job Market Analytics</h1>", unsafe_allow_html=True
+)
+st.markdown(
+    "<p style='text-align:center;color:#94a3b8;margin-bottom:2rem'>Real-time insights from tech job postings collected via public APIs</p>",
+    unsafe_allow_html=True,
+)
 
 c1, c2, c3, c4, c5 = st.columns(5)
 c1.markdown(mc("💼", f"{n_jobs:,}", "Total Jobs", "blue"), unsafe_allow_html=True)
@@ -165,25 +187,49 @@ sh("Jobs by Location", "Geographic distribution of collected postings")
 
 cl, cr = st.columns(2, gap="large")
 with cl:
-    ld = fd["location"].value_counts().head(12).reset_index(); ld.columns = ["Location", "Count"]
-    fig = px.bar(ld, y="Location", x="Count", orientation="h", text="Count", color="Count", color_continuous_scale="Viridis")
-    fig.update_layout(**DARK, title="Top Locations", height=500, yaxis=dict(autorange="reversed"), xaxis_title="", yaxis_title="")
-    fig.update_traces(textposition="outside", textfont=dict(color="#e2e8f0", size=12)); fig.update_coloraxes(showscale=False)
+    ld = fd["location"].value_counts().head(12).reset_index()
+    ld.columns = ["Location", "Count"]
+    fig = px.bar(
+        ld, y="Location", x="Count", orientation="h", text="Count", color="Count", color_continuous_scale="Viridis"
+    )
+    fig.update_layout(
+        **DARK, title="Top Locations", height=500, yaxis=dict(autorange="reversed"), xaxis_title="", yaxis_title=""
+    )
+    fig.update_traces(textposition="outside", textfont=dict(color="#e2e8f0", size=12))
+    fig.update_coloraxes(showscale=False)
     st.plotly_chart(fig, width="stretch")
 
 with cr:
-    cd = fd["company"].value_counts().head(12).reset_index(); cd.columns = ["Company", "Openings"]
-    fig = px.bar(cd, y="Company", x="Openings", orientation="h", text="Openings", color="Openings", color_continuous_scale="Tealgrn")
-    fig.update_layout(**DARK, title="Top Hiring Companies", height=500, yaxis=dict(autorange="reversed"), xaxis_title="", yaxis_title="")
-    fig.update_traces(textposition="outside", textfont=dict(color="#e2e8f0", size=12)); fig.update_coloraxes(showscale=False)
+    cd = fd["company"].value_counts().head(12).reset_index()
+    cd.columns = ["Company", "Openings"]
+    fig = px.bar(
+        cd,
+        y="Company",
+        x="Openings",
+        orientation="h",
+        text="Openings",
+        color="Openings",
+        color_continuous_scale="Tealgrn",
+    )
+    fig.update_layout(
+        **DARK,
+        title="Top Hiring Companies",
+        height=500,
+        yaxis=dict(autorange="reversed"),
+        xaxis_title="",
+        yaxis_title="",
+    )
+    fig.update_traces(textposition="outside", textfont=dict(color="#e2e8f0", size=12))
+    fig.update_coloraxes(showscale=False)
     st.plotly_chart(fig, width="stretch")
 
 td = fd.dropna(subset=["posted_date"])
 if not td.empty:
-    day = td.groupby(td["posted_date"].dt.date).size().reset_index(name="Jobs"); day.columns = ["Date", "Jobs"]
+    day = td.groupby(td["posted_date"].dt.date).size().reset_index(name="Jobs")
+    day.columns = ["Date", "Jobs"]
     fig = px.area(day, x="Date", y="Jobs", color_discrete_sequence=["#3b82f6"])
     fig.update_layout(**DARK, title="Posting Volume Over Time", height=320, xaxis_title="", yaxis_title="Jobs Posted")
-    fig.update_traces(line_shape="spline", fill="tozeroy", opacity=.75)
+    fig.update_traces(line_shape="spline", fill="tozeroy", opacity=0.75)
     st.plotly_chart(fig, width="stretch")
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -195,17 +241,30 @@ if fsk.empty:
     st.info("No skills detected in the current selection.")
 else:
     tn = st.slider("Skills to display", 5, min(40, len(fsk)), min(20, len(fsk)))
-    ts = fsk.head(tn).copy(); ts["Skill"] = ts["Skill"].str.title()
+    ts = fsk.head(tn).copy()
+    ts["Skill"] = ts["Skill"].str.title()
     lc, rc = st.columns([3, 2], gap="large")
     with lc:
-        fig = px.bar(ts, y="Skill", x="Demand", orientation="h", text="Demand", color="Demand", color_continuous_scale="Sunset")
-        fig.update_layout(**DARK, title=f"Top {tn} Skills", height=max(480, tn * 32), yaxis=dict(autorange="reversed"), xaxis_title="Job Postings", yaxis_title="")
-        fig.update_traces(textposition="outside", textfont=dict(color="#e2e8f0", size=12)); fig.update_coloraxes(showscale=False)
+        fig = px.bar(
+            ts, y="Skill", x="Demand", orientation="h", text="Demand", color="Demand", color_continuous_scale="Sunset"
+        )
+        fig.update_layout(
+            **DARK,
+            title=f"Top {tn} Skills",
+            height=max(480, tn * 32),
+            yaxis=dict(autorange="reversed"),
+            xaxis_title="Job Postings",
+            yaxis_title="",
+        )
+        fig.update_traces(textposition="outside", textfont=dict(color="#e2e8f0", size=12))
+        fig.update_coloraxes(showscale=False)
         st.plotly_chart(fig, width="stretch")
     with rc:
         st.markdown("#### Skill Rankings")
-        disp = fsk.copy(); disp["Skill"] = disp["Skill"].str.title()
-        disp.index = range(1, len(disp) + 1); disp.index.name = "#"
+        disp = fsk.copy()
+        disp["Skill"] = disp["Skill"].str.title()
+        disp.index = range(1, len(disp) + 1)
+        disp.index.name = "#"
         st.dataframe(disp, height=max(480, tn * 32), width="stretch")
         m1, m2 = st.columns(2)
         m1.markdown(mc("🔢", f"{int(fsk['Demand'].sum()):,}", "Total Mentions", "blue"), unsafe_allow_html=True)
@@ -222,9 +281,14 @@ else:
             st.markdown("#### Skill Co-occurrence")
             tp = sorted(pc.items(), key=lambda x: x[1], reverse=True)[:15]
             pdf = pd.DataFrame([(f"{a.title()} + {b.title()}", c) for (a, b), c in tp], columns=["Pair", "Count"])
-            fig = px.bar(pdf, y="Pair", x="Count", orientation="h", text="Count", color="Count", color_continuous_scale="Purp")
-            fig.update_layout(**DARK, height=max(380, len(tp) * 35), yaxis=dict(autorange="reversed"), xaxis_title="", yaxis_title="")
-            fig.update_traces(textposition="outside", textfont=dict(color="#e2e8f0", size=12)); fig.update_coloraxes(showscale=False)
+            fig = px.bar(
+                pdf, y="Pair", x="Count", orientation="h", text="Count", color="Count", color_continuous_scale="Purp"
+            )
+            fig.update_layout(
+                **DARK, height=max(380, len(tp) * 35), yaxis=dict(autorange="reversed"), xaxis_title="", yaxis_title=""
+            )
+            fig.update_traces(textposition="outside", textfont=dict(color="#e2e8f0", size=12))
+            fig.update_coloraxes(showscale=False)
             st.plotly_chart(fig, width="stretch")
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -248,17 +312,46 @@ else:
     s1.markdown(mc("📋", f"{len(sdf):,}", "Jobs with Salary", "blue"), unsafe_allow_html=True)
     s2.markdown(mc("📉", f"${med_lo:,.0f}", "Median Min", "green"), unsafe_allow_html=True)
     s3.markdown(mc("📈", f"${med_hi:,.0f}" if med_hi else "N/A", "Median Max", "purple"), unsafe_allow_html=True)
-    s4.markdown(mc("↔️", f"${sdf['salary_min'].min():,.0f}–${sdf[['salary_min','salary_max']].max().max():,.0f}", "Full Range", "amber"), unsafe_allow_html=True)
+    s4.markdown(
+        mc(
+            "↔️",
+            f"${sdf['salary_min'].min():,.0f}–${sdf[['salary_min', 'salary_max']].max().max():,.0f}",
+            "Full Range",
+            "amber",
+        ),
+        unsafe_allow_html=True,
+    )
     st.markdown("<br>", unsafe_allow_html=True)
 
     hl, hr = st.columns(2, gap="large")
     with hl:
         fig = go.Figure()
-        fig.add_trace(go.Histogram(x=sdf["salary_min"], name="Min Salary", marker_color="#3b82f6", opacity=.8, nbinsx=12))
+        fig.add_trace(
+            go.Histogram(x=sdf["salary_min"], name="Min Salary", marker_color="#3b82f6", opacity=0.8, nbinsx=12)
+        )
         if sdf["salary_max"].notna().any():
-            fig.add_trace(go.Histogram(x=sdf["salary_max"].dropna(), name="Max Salary", marker_color="#f43f5e", opacity=.6, nbinsx=12))
-        fig.update_layout(**DARK, title="Salary Distribution", barmode="overlay", xaxis_title="Annual Salary (USD)", yaxis_title="Jobs", height=480,
-                          legend=dict(yanchor="top", y=.97, xanchor="right", x=.97, bgcolor="rgba(30,41,59,.8)", bordercolor="#475569", borderwidth=1))
+            fig.add_trace(
+                go.Histogram(
+                    x=sdf["salary_max"].dropna(), name="Max Salary", marker_color="#f43f5e", opacity=0.6, nbinsx=12
+                )
+            )
+        fig.update_layout(
+            **DARK,
+            title="Salary Distribution",
+            barmode="overlay",
+            xaxis_title="Annual Salary (USD)",
+            yaxis_title="Jobs",
+            height=480,
+            legend=dict(
+                yanchor="top",
+                y=0.97,
+                xanchor="right",
+                x=0.97,
+                bgcolor="rgba(30,41,59,.8)",
+                bordercolor="#475569",
+                borderwidth=1,
+            ),
+        )
         st.plotly_chart(fig, width="stretch")
 
     with hr:
@@ -267,10 +360,20 @@ else:
             rr["label"] = rr["title"].str[:28] + " — " + rr["company"].str[:12]
             fig = go.Figure()
             for _, r in rr.iterrows():
-                fig.add_trace(go.Scatter(x=[r["salary_min"], r["salary_max"]], y=[r["label"], r["label"]], mode="lines+markers",
-                    marker=dict(size=10, color=["#3b82f6", "#f43f5e"]), line=dict(color="#64748b", width=3), showlegend=False,
-                    hovertemplate=f"<b>{r['title']}</b><br>{r['company']}<br>${r['salary_min']:,.0f}–${r['salary_max']:,.0f}<extra></extra>"))
-            fig.update_layout(**DARK, title="Salary Ranges", height=480, xaxis_title="Annual Salary (USD)", yaxis_title="")
+                fig.add_trace(
+                    go.Scatter(
+                        x=[r["salary_min"], r["salary_max"]],
+                        y=[r["label"], r["label"]],
+                        mode="lines+markers",
+                        marker=dict(size=10, color=["#3b82f6", "#f43f5e"]),
+                        line=dict(color="#64748b", width=3),
+                        showlegend=False,
+                        hovertemplate=f"<b>{r['title']}</b><br>{r['company']}<br>${r['salary_min']:,.0f}–${r['salary_max']:,.0f}<extra></extra>",
+                    )
+                )
+            fig.update_layout(
+                **DARK, title="Salary Ranges", height=480, xaxis_title="Annual Salary (USD)", yaxis_title=""
+            )
             st.plotly_chart(fig, width="stretch")
         else:
             st.info("No postings with both min and max salary.")
@@ -295,10 +398,20 @@ gt = int(mode_counts["Count"].sum())
 
 dl, dri = st.columns([3, 2], gap="large")
 with dl:
-    fig = px.pie(mode_counts, names="Mode", values="Count", color="Mode",
-                 color_discrete_map={"Remote": "#10b981", "Onsite": "#f43f5e"}, hole=.55)
-    fig.update_traces(textinfo="percent+label+value", textfont=dict(size=15, color="#fff"),
-                      pull=[.04, .04], marker=dict(line=dict(color="#1e293b", width=2)))
+    fig = px.pie(
+        mode_counts,
+        names="Mode",
+        values="Count",
+        color="Mode",
+        color_discrete_map={"Remote": "#10b981", "Onsite": "#f43f5e"},
+        hole=0.55,
+    )
+    fig.update_traces(
+        textinfo="percent+label+value",
+        textfont=dict(size=15, color="#fff"),
+        pull=[0.04, 0.04],
+        marker=dict(line=dict(color="#1e293b", width=2)),
+    )
     fig.update_layout(**DARK, title="Work Mode Split", height=480, showlegend=False)
     st.plotly_chart(fig, width="stretch")
 
@@ -313,10 +426,22 @@ with dri:
 
 ro = fd[fd["work_mode"] == "Remote"]
 if not ro.empty:
-    rl = ro["location"].value_counts().head(12).reset_index(); rl.columns = ["Location", "Jobs"]
+    rl = ro["location"].value_counts().head(12).reset_index()
+    rl.columns = ["Location", "Jobs"]
     fig = px.bar(rl, y="Location", x="Jobs", orientation="h", text="Jobs", color="Jobs", color_continuous_scale="Emrld")
-    fig.update_layout(**DARK, title="Where Remote Jobs Are Posted", height=480, yaxis=dict(autorange="reversed"), xaxis_title="", yaxis_title="")
-    fig.update_traces(textposition="outside", textfont=dict(color="#e2e8f0", size=12)); fig.update_coloraxes(showscale=False)
+    fig.update_layout(
+        **DARK,
+        title="Where Remote Jobs Are Posted",
+        height=480,
+        yaxis=dict(autorange="reversed"),
+        xaxis_title="",
+        yaxis_title="",
+    )
+    fig.update_traces(textposition="outside", textfont=dict(color="#e2e8f0", size=12))
+    fig.update_coloraxes(showscale=False)
     st.plotly_chart(fig, width="stretch")
 
-st.markdown("<br><hr style='border-color:#334155'><p style='text-align:center;color:#64748b;font-size:.85rem'>Tech Job Market Analytics Pipeline · Built with Streamlit & Plotly</p>", unsafe_allow_html=True)
+st.markdown(
+    "<br><hr style='border-color:#334155'><p style='text-align:center;color:#64748b;font-size:.85rem'>Tech Job Market Analytics Pipeline · Built with Streamlit & Plotly</p>",
+    unsafe_allow_html=True,
+)

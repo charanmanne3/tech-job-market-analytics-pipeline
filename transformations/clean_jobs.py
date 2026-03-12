@@ -105,16 +105,67 @@ def add_work_mode(df: pd.DataFrame) -> pd.DataFrame:
 
 # ── Location ─────────────────────────────────────────────────────────────────
 _LOC_ALIASES: dict[str, str] = {
-    "sf": "San Francisco", "nyc": "New York", "ny": "New York",
-    "la": "Los Angeles", "dc": "Washington D.C.",
-    "worldwide": "Remote", "anywhere": "Remote", "global": "Remote",
+    "sf": "San Francisco",
+    "nyc": "New York",
+    "ny": "New York",
+    "la": "Los Angeles",
+    "dc": "Washington D.C.",
+    "worldwide": "Remote",
+    "anywhere": "Remote",
+    "global": "Remote",
     "u. s.": "United States",
 }
 _US_STATES = {
-    "al","ak","az","ar","ca","co","ct","de","fl","ga","hi","id","il","in",
-    "ia","ks","ky","la","me","md","ma","mi","mn","ms","mo","mt","ne","nv",
-    "nh","nj","nm","ny","nc","nd","oh","ok","or","pa","ri","sc","sd","tn",
-    "tx","ut","vt","va","wa","wv","wi","wy",
+    "al",
+    "ak",
+    "az",
+    "ar",
+    "ca",
+    "co",
+    "ct",
+    "de",
+    "fl",
+    "ga",
+    "hi",
+    "id",
+    "il",
+    "in",
+    "ia",
+    "ks",
+    "ky",
+    "la",
+    "me",
+    "md",
+    "ma",
+    "mi",
+    "mn",
+    "ms",
+    "mo",
+    "mt",
+    "ne",
+    "nv",
+    "nh",
+    "nj",
+    "nm",
+    "ny",
+    "nc",
+    "nd",
+    "oh",
+    "ok",
+    "or",
+    "pa",
+    "ri",
+    "sc",
+    "sd",
+    "tn",
+    "tx",
+    "ut",
+    "vt",
+    "va",
+    "wa",
+    "wv",
+    "wi",
+    "wy",
 }
 
 
@@ -143,7 +194,9 @@ def _norm_loc(raw: str) -> str:
 
 def normalise_locations(df: pd.DataFrame) -> pd.DataFrame:
     df["location"] = df["location"].apply(lambda r: _norm_loc(re.split(r"[|;]", r)[0]) if r.strip() else "Remote")
-    df["is_remote"] = df["location"].str.lower().str.contains("remote") | df["job_type"].str.lower().str.contains("remote")
+    df["is_remote"] = df["location"].str.lower().str.contains("remote") | df["job_type"].str.lower().str.contains(
+        "remote"
+    )
     logger.info("Locations: %d unique, %.0f%% remote", df["location"].nunique(), df["is_remote"].mean() * 100)
     return df
 
@@ -187,10 +240,17 @@ def parse_salaries(df: pd.DataFrame) -> pd.DataFrame:
 
 # ── Job type ─────────────────────────────────────────────────────────────────
 _JOB_TYPE_MAP = {
-    "full_time": "Full-time", "full time": "Full-time", "fulltime": "Full-time",
-    "part_time": "Part-time", "part time": "Part-time", "parttime": "Part-time",
-    "contract": "Contract", "freelance": "Freelance", "internship": "Internship",
-    "remote": "Full-time", "": "Unknown",
+    "full_time": "Full-time",
+    "full time": "Full-time",
+    "fulltime": "Full-time",
+    "part_time": "Part-time",
+    "part time": "Part-time",
+    "parttime": "Part-time",
+    "contract": "Contract",
+    "freelance": "Freelance",
+    "internship": "Internship",
+    "remote": "Full-time",
+    "": "Unknown",
 }
 
 
@@ -223,10 +283,24 @@ def run_cleaning() -> pd.DataFrame:
     df = extract_skills(df)
 
     col_order = [
-        "job_id", "title", "company", "location", "is_remote", "work_mode",
-        "salary", "salary_min", "salary_max",
-        "job_type", "category", "skills", "skill_count",
-        "description", "posted_date", "url", "tags", "source",
+        "job_id",
+        "title",
+        "company",
+        "location",
+        "is_remote",
+        "work_mode",
+        "salary",
+        "salary_min",
+        "salary_max",
+        "job_type",
+        "category",
+        "skills",
+        "skill_count",
+        "description",
+        "posted_date",
+        "url",
+        "tags",
+        "source",
     ]
     present = [c for c in col_order if c in df.columns]
     extra = [c for c in df.columns if c not in col_order]

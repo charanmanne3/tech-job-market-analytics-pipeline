@@ -7,8 +7,15 @@ data/processed/
 data/analytics/
 logs/
 .venv/
+venv/
+env/
 *.egg-info/
 dist/
 build/
 .DS_Store
-.DS_Store
+node_modules/
+.vercel/
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/

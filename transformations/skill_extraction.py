@@ -61,12 +61,13 @@ def extract_skills(df: pd.DataFrame) -> pd.DataFrame:
         top = nonempty.str.split(", ").explode().str.strip().value_counts().head(15)
         logger.info("Top 15 skills:\n%s", top.to_string())
 
-    logger.info(
-        "Skill stats — mean %.1f/job, max %d, zero-skill jobs %d",
-        df["skill_count"].mean(),
-        df["skill_count"].max(),
-        (df["skill_count"] == 0).sum(),
-    )
+    if not df.empty:
+        logger.info(
+            "Skill stats — mean %.1f/job, max %d, zero-skill jobs %d",
+            df["skill_count"].mean(),
+            df["skill_count"].max(),
+            (df["skill_count"] == 0).sum(),
+        )
     return df
 
 

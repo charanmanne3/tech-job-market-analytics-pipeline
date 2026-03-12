@@ -8,7 +8,6 @@ in production, the React static build.
 import sys
 from itertools import combinations
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -94,8 +93,8 @@ def get_filters():
 @app.get("/api/dashboard")
 def get_dashboard(
     locations: list[str] = Query(default=[]),
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
 ):
     df = _get_data()
     if df.empty:
@@ -160,15 +159,7 @@ def _skills(df: pd.DataFrame) -> dict:
     if "skills" not in df.columns:
         return out
 
-    exploded = (
-        df["skills"]
-        .dropna()
-        .loc[lambda x: x != ""]
-        .str.split(", ")
-        .explode()
-        .str.strip()
-        .str.lower()
-    )
+    exploded = df["skills"].dropna().loc[lambda x: x != ""].str.split(", ").explode().str.strip().str.lower()
     counts = exploded.value_counts()
     out["rankings"] = [{"skill": s.title(), "demand": int(d)} for s, d in counts.items()]
     out["total_mentions"] = int(counts.sum())
@@ -180,9 +171,7 @@ def _skills(df: pd.DataFrame) -> dict:
         for a, b in combinations(items, 2):
             pairs[(a, b)] = pairs.get((a, b), 0) + 1
     top_pairs = sorted(pairs.items(), key=lambda x: x[1], reverse=True)[:15]
-    out["cooccurrence"] = [
-        {"pair": f"{a.title()} + {b.title()}", "count": c} for (a, b), c in top_pairs
-    ]
+    out["cooccurrence"] = [{"pair": f"{a.title()} + {b.title()}", "count": c} for (a, b), c in top_pairs]
     return out
 
 
@@ -237,9 +226,7 @@ def _salary(df: pd.DataFrame) -> dict:
         ]
 
     cols = [c for c in ["title", "company", "location", "salary_min", "salary_max"] if c in sdf.columns]
-    out["table"] = (
-        sdf[cols].sort_values("salary_min", ascending=False).head(50).fillna("").to_dict(orient="records")
-    )
+    out["table"] = sdf[cols].sort_values("salary_min", ascending=False).head(50).fillna("").to_dict(orient="records")
     return out
 
 
@@ -247,9 +234,7 @@ def _work_mode(df: pd.DataFrame) -> dict:
     wdf = df.copy()
     if "work_mode" not in wdf.columns:
         wdf["work_mode"] = wdf["location"].apply(
-            lambda loc: "Remote"
-            if "remote" in str(loc).lower() or "worldwide" in str(loc).lower()
-            else "Onsite"
+            lambda loc: "Remote" if "remote" in str(loc).lower() or "worldwide" in str(loc).lower() else "Onsite"
         )
 
     mode_counts = wdf["work_mode"].value_counts()
@@ -259,7 +244,7 @@ def _work_mode(df: pd.DataFrame) -> dict:
     ro = wdf[wdf["work_mode"] == "Remote"]
     if not ro.empty:
         rl = ro["location"].value_counts().head(12)
-        remote_locs = [{"name": str(l), "count": int(c)} for l, c in rl.items()]
+        remote_locs = [{"name": str(loc), "count": int(cnt)} for loc, cnt in rl.items()]
 
     return {"split": split, "remote_locations": remote_locs}
 

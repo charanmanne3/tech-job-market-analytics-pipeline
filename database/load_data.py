@@ -38,7 +38,8 @@ logger = get_logger("database.load_data")
 metadata = MetaData()
 
 jobs_table = Table(
-    "jobs", metadata,
+    "jobs",
+    metadata,
     Column("job_id", String(255), primary_key=True),
     Column("title", String(500)),
     Column("company", String(500)),
@@ -56,13 +57,15 @@ jobs_table = Table(
 )
 
 skills_table = Table(
-    "skills", metadata,
+    "skills",
+    metadata,
     Column("skill_id", Integer, primary_key=True, autoincrement=True),
     Column("skill_name", String(100), unique=True),
 )
 
 job_skills_table = Table(
-    "job_skills", metadata,
+    "job_skills",
+    metadata,
     Column("job_id", String(255)),
     Column("skill_id", Integer),
 )

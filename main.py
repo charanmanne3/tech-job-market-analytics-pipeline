@@ -10,8 +10,8 @@ Runs the full ETL pipeline:
 import sys
 
 from data_ingestion.fetch_jobs import run_ingestion
-from transformations.clean_jobs import run_cleaning
 from database.load_data import run_load
+from transformations.clean_jobs import run_cleaning
 from utils.logger import get_logger
 
 logger = get_logger("pipeline.main")

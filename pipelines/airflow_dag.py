@@ -53,7 +53,6 @@ with DAG(
     catchup=False,
     tags=["data-engineering", "job-market"],
 ) as dag:
-
     extract_task = PythonOperator(
         task_id="extract_jobs",
         python_callable=_extract,

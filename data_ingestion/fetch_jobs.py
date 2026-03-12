@@ -68,7 +68,7 @@ def request_with_retries(
             logger.warning("Request error (attempt %d): %s", attempt, exc)
 
         if attempt < RETRY_ATTEMPTS:
-            wait = RETRY_BACKOFF ** attempt
+            wait = RETRY_BACKOFF**attempt
             logger.info("Retrying in %ds …", wait)
             time.sleep(wait)
 
