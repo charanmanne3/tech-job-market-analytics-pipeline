@@ -1,17 +1,19 @@
 """
-Vercel serverless function — self-contained FastAPI app.
+Vercel serverless function — self-contained, lightweight FastAPI app.
 
-This file is intentionally independent of the rest of the project so that
-Vercel's bundler only ships this single file + pip packages, keeping the
-Lambda well under the 250 MB limit.
+Uses only the Python standard library for data processing (no pandas/numpy)
+to stay well under Vercel's 250 MB Lambda limit.
 """
 
-import os
+from __future__ import annotations
+
+import csv
+import math
+from collections import Counter
 from itertools import combinations
 from pathlib import Path
+from statistics import mean, median
 
-import numpy as np
-import pandas as pd
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -24,77 +26,62 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Config (inlined to avoid importing the project tree) ─────────────────────
-
-_BASE = Path(__file__).resolve().parent.parent
-_PROCESSED_PARQUET = _BASE / "data" / "processed" / "clean_jobs.parquet"
-_CLEAN_CSV = _BASE / "data" / "processed" / "clean_jobs.csv"
-
-_DB_HOST = os.getenv("DB_HOST", "localhost")
-_DB_PORT = os.getenv("DB_PORT", "5432")
-_DB_NAME = os.getenv("DB_NAME", "job_market")
-_DB_USER = os.getenv("DB_USER", "postgres")
-_DB_PASS = os.getenv("DB_PASSWORD", "postgres")
-_DATABASE_URL = f"postgresql+psycopg2://{_DB_USER}:{_DB_PASS}@{_DB_HOST}:{_DB_PORT}/{_DB_NAME}"
-
 # ── Data layer ───────────────────────────────────────────────────────────────
 
-_cached_df: pd.DataFrame | None = None
+_BASE = Path(__file__).resolve().parent.parent
+_CSV_PATHS = [
+    _BASE / "data" / "processed" / "clean_jobs.csv",
+    _BASE / "data" / "clean_jobs.csv",
+]
+
+_cached_rows: list[dict] | None = None
 
 
-def _load_data() -> pd.DataFrame:
-    if _PROCESSED_PARQUET.exists():
-        try:
-            return pd.read_parquet(_PROCESSED_PARQUET)
-        except ImportError:
-            pass
-    if _CLEAN_CSV.exists():
-        return pd.read_csv(_CLEAN_CSV)
+def _load_data() -> list[dict]:
+    for p in _CSV_PATHS:
+        if p.exists():
+            with open(p, newline="", encoding="utf-8") as f:
+                return list(csv.DictReader(f))
+    return []
+
+
+def _get_data() -> list[dict]:
+    global _cached_rows
+    if _cached_rows is None:
+        _cached_rows = _load_data()
+    return list(_cached_rows)
+
+
+def _safe_float(val: str | None) -> float | None:
+    if not val or val.strip() == "":
+        return None
     try:
-        from sqlalchemy import create_engine, text
-
-        eng = create_engine(_DATABASE_URL)
-        with eng.connect() as conn:
-            df = pd.read_sql(text("SELECT * FROM jobs"), conn)
-            if not df.empty:
-                return df
-    except Exception:
-        pass
-    return pd.DataFrame()
+        v = float(val)
+        return v if math.isfinite(v) else None
+    except (ValueError, TypeError):
+        return None
 
 
-def _get_data() -> pd.DataFrame:
-    global _cached_df
-    if _cached_df is None:
-        _cached_df = _load_data()
-    return _cached_df.copy()
+# ── Endpoints ────────────────────────────────────────────────────────────────
 
 
 @app.post("/api/reload")
 def reload_data():
-    global _cached_df
-    _cached_df = None
+    global _cached_rows
+    _cached_rows = None
     return {"status": "ok"}
-
-
-# ── Filters ──────────────────────────────────────────────────────────────────
 
 
 @app.get("/api/filters")
 def get_filters():
-    df = _get_data()
-    if df.empty:
+    rows = _get_data()
+    if not rows:
         return {"locations": [], "date_range": None}
 
-    locations = sorted(df["location"].dropna().unique().tolist())
-    dates = pd.to_datetime(df["posted_date"], errors="coerce").dropna()
-    date_range = None
-    if not dates.empty:
-        date_range = {"min": str(dates.min().date()), "max": str(dates.max().date())}
+    locations = sorted({r.get("location", "") for r in rows if r.get("location")})
+    dates = sorted(d for r in rows if (d := r.get("posted_date", "").strip()))
+    date_range = {"min": dates[0][:10], "max": dates[-1][:10]} if dates else None
     return {"locations": locations, "date_range": date_range}
-
-
-# ── Dashboard ────────────────────────────────────────────────────────────────
 
 
 @app.get("/api/dashboard")
@@ -103,154 +90,181 @@ def get_dashboard(
     date_from: str | None = None,
     date_to: str | None = None,
 ):
-    df = _get_data()
-    if df.empty:
+    rows = _get_data()
+    if not rows:
         return {"error": "No data available. Run the pipeline first."}
 
-    df["posted_date"] = pd.to_datetime(df["posted_date"], errors="coerce")
-    for col in ("salary_min", "salary_max", "skill_count"):
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-    if "is_remote" in df.columns:
-        df["is_remote"] = df["is_remote"].astype(bool)
-
     if locations:
-        df = df[df["location"].isin(locations)]
+        rows = [r for r in rows if r.get("location") in locations]
     if date_from:
-        df = df[df["posted_date"] >= pd.Timestamp(date_from)]
+        rows = [r for r in rows if (r.get("posted_date") or "") >= date_from]
     if date_to:
-        df = df[df["posted_date"] <= pd.Timestamp(date_to)]
+        rows = [r for r in rows if (r.get("posted_date") or "") <= date_to]
 
     return {
-        "metrics": _metrics(df),
-        "top_locations": _top_values(df, "location"),
-        "top_companies": _top_values(df, "company"),
-        "timeline": _timeline(df),
-        "skills": _skills(df),
-        "salary": _salary(df),
-        "work_mode": _work_mode(df),
+        "metrics": _metrics(rows),
+        "top_locations": _top_values(rows, "location"),
+        "top_companies": _top_values(rows, "company"),
+        "timeline": _timeline(rows),
+        "skills": _skills(rows),
+        "salary": _salary(rows),
+        "work_mode": _work_mode(rows),
     }
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 
-def _metrics(df: pd.DataFrame) -> dict:
-    avg_sk = 0.0
-    if "skill_count" in df.columns and df["skill_count"].notna().any():
-        avg_sk = round(float(df["skill_count"].mean()), 1)
+def _metrics(rows: list[dict]) -> dict:
+    companies = {r.get("company") for r in rows if r.get("company")}
+    locs = {r.get("location") for r in rows if r.get("location")}
+    skill_counts = [int(r["skill_count"]) for r in rows if _safe_float(r.get("skill_count"))]
+    salary_count = sum(1 for r in rows if _safe_float(r.get("salary_min")))
     return {
-        "total_jobs": len(df),
-        "companies": int(df["company"].nunique()),
-        "locations": int(df["location"].nunique()),
-        "avg_skills": avg_sk,
-        "with_salary": int(df["salary_min"].notna().sum()) if "salary_min" in df.columns else 0,
+        "total_jobs": len(rows),
+        "companies": len(companies),
+        "locations": len(locs),
+        "avg_skills": round(mean(skill_counts), 1) if skill_counts else 0.0,
+        "with_salary": salary_count,
     }
 
 
-def _top_values(df: pd.DataFrame, col: str, n: int = 12) -> list[dict]:
-    counts = df[col].value_counts().head(n)
-    return [{"name": str(k), "count": int(v)} for k, v in counts.items()]
+def _top_values(rows: list[dict], col: str, n: int = 12) -> list[dict]:
+    ctr = Counter(r.get(col) for r in rows if r.get(col))
+    return [{"name": k, "count": v} for k, v in ctr.most_common(n)]
 
 
-def _timeline(df: pd.DataFrame) -> list[dict]:
-    td = df.dropna(subset=["posted_date"])
-    if td.empty:
-        return []
-    day = td.groupby(td["posted_date"].dt.date).size().sort_index()
-    return [{"date": str(d), "count": int(c)} for d, c in day.items()]
+def _timeline(rows: list[dict]) -> list[dict]:
+    day_ctr: Counter[str] = Counter()
+    for r in rows:
+        d = (r.get("posted_date") or "").strip()[:10]
+        if d:
+            day_ctr[d] += 1
+    return [{"date": d, "count": c} for d, c in sorted(day_ctr.items())]
 
 
-def _skills(df: pd.DataFrame) -> dict:
+def _skills(rows: list[dict]) -> dict:
     out: dict = {"rankings": [], "total_mentions": 0, "unique_skills": 0, "cooccurrence": []}
-    if "skills" not in df.columns:
+    skill_counter: Counter[str] = Counter()
+    pair_counter: Counter[tuple[str, str]] = Counter()
+
+    for r in rows:
+        raw = (r.get("skills") or "").strip()
+        if not raw:
+            continue
+        items = sorted({s.strip().lower() for s in raw.split(",") if s.strip()})
+        skill_counter.update(items)
+        for a, b in combinations(items, 2):
+            pair_counter[(a, b)] += 1
+
+    if not skill_counter:
         return out
 
-    exploded = df["skills"].dropna().loc[lambda x: x != ""].str.split(", ").explode().str.strip().str.lower()
-    counts = exploded.value_counts()
-    out["rankings"] = [{"skill": s.title(), "demand": int(d)} for s, d in counts.items()]
-    out["total_mentions"] = int(counts.sum())
-    out["unique_skills"] = len(counts)
-
-    pairs: dict[tuple, int] = {}
-    for skills_str in df["skills"].dropna():
-        items = sorted({s.strip().lower() for s in skills_str.split(",") if s.strip()})
-        for a, b in combinations(items, 2):
-            pairs[(a, b)] = pairs.get((a, b), 0) + 1
-    top_pairs = sorted(pairs.items(), key=lambda x: x[1], reverse=True)[:15]
-    out["cooccurrence"] = [{"pair": f"{a.title()} + {b.title()}", "count": c} for (a, b), c in top_pairs]
+    out["rankings"] = [{"skill": s.title(), "demand": d} for s, d in skill_counter.most_common()]
+    out["total_mentions"] = sum(skill_counter.values())
+    out["unique_skills"] = len(skill_counter)
+    out["cooccurrence"] = [
+        {"pair": f"{a.title()} + {b.title()}", "count": c} for (a, b), c in pair_counter.most_common(15)
+    ]
     return out
 
 
-def _salary(df: pd.DataFrame) -> dict:
+def _histogram(values: list[float], bins: int = 12) -> tuple[list[int], list[float]]:
+    """Simple histogram using only stdlib."""
+    if not values:
+        return [], []
+    lo, hi = min(values), max(values)
+    if lo == hi:
+        return [len(values)], [lo, hi + 1]
+    width = (hi - lo) / bins
+    edges = [lo + i * width for i in range(bins + 1)]
+    edges[-1] = hi
+    counts = [0] * bins
+    for v in values:
+        idx = min(int((v - lo) / width), bins - 1)
+        counts[idx] += 1
+    return counts, edges
+
+
+def _salary(rows: list[dict]) -> dict:
     out: dict = {"metrics": {}, "histogram": [], "ranges": [], "table": []}
-    if "salary_min" not in df.columns:
+
+    srows = []
+    for r in rows:
+        smin = _safe_float(r.get("salary_min"))
+        if smin and smin > 0:
+            srows.append((r, smin, _safe_float(r.get("salary_max"))))
+
+    if not srows:
         return out
 
-    sdf = df.dropna(subset=["salary_min"])
-    sdf = sdf[sdf["salary_min"] > 0]
-    if sdf.empty:
-        return out
-
-    has_max = sdf["salary_max"].notna().any()
-    med_min = float(sdf["salary_min"].median())
-    med_max = float(sdf["salary_max"].dropna().median()) if has_max else 0
-    full_min = float(sdf["salary_min"].min())
-    full_max = float(sdf[["salary_min", "salary_max"]].max().max())
+    mins = [s[1] for s in srows]
+    maxes = [s[2] for s in srows if s[2] is not None]
 
     out["metrics"] = {
-        "count": len(sdf),
-        "median_min": med_min,
-        "median_max": med_max,
-        "full_min": full_min,
-        "full_max": full_max,
+        "count": len(srows),
+        "median_min": median(mins),
+        "median_max": median(maxes) if maxes else 0,
+        "full_min": min(mins),
+        "full_max": max(maxes) if maxes else max(mins),
     }
 
-    all_vals = pd.concat([sdf["salary_min"], sdf["salary_max"].dropna()])
-    _, edges = np.histogram(all_vals.values, bins=12)
-    min_bins, _ = np.histogram(sdf["salary_min"].values, bins=edges)
-    max_bins = np.zeros_like(min_bins)
-    if has_max:
-        max_bins, _ = np.histogram(sdf["salary_max"].dropna().values, bins=edges)
+    all_vals = mins + maxes
+    counts, edges = _histogram(all_vals, 12)
+    min_counts, _ = _histogram(mins, 12)
+    max_counts, _ = _histogram(maxes, 12) if maxes else ([0] * 12, [])
+
+    n = min(len(counts), len(edges) - 1, len(min_counts))
+    if len(max_counts) < n:
+        max_counts.extend([0] * (n - len(max_counts)))
     out["histogram"] = [
         {
             "range": f"${int(edges[i]):,}\u2013${int(edges[i + 1]):,}",
-            "min_salary": int(min_bins[i]),
-            "max_salary": int(max_bins[i]),
+            "min_salary": min_counts[i],
+            "max_salary": max_counts[i],
         }
-        for i in range(len(min_bins))
+        for i in range(n)
     ]
 
-    if has_max:
-        rr = sdf.dropna(subset=["salary_max"]).sort_values("salary_min").tail(15)
-        out["ranges"] = [
-            {
-                "label": f"{r['title'][:28]} \u2014 {r['company'][:12]}",
-                "min": float(r["salary_min"]),
-                "max": float(r["salary_max"]),
-            }
-            for _, r in rr.iterrows()
-        ]
+    if maxes:
+        with_max = [(r, smin, smax) for r, smin, smax in srows if smax is not None]
+        with_max.sort(key=lambda x: x[1])
+        for r, smin, smax in with_max[-15:]:
+            out["ranges"].append(
+                {
+                    "label": f"{(r.get('title') or '')[:28]} \u2014 {(r.get('company') or '')[:12]}",
+                    "min": smin,
+                    "max": smax,
+                }
+            )
 
-    cols = [c for c in ["title", "company", "location", "salary_min", "salary_max"] if c in sdf.columns]
-    out["table"] = sdf[cols].sort_values("salary_min", ascending=False).head(50).fillna("").to_dict(orient="records")
+    sorted_rows = sorted(srows, key=lambda x: x[1], reverse=True)[:50]
+    for r, smin, smax in sorted_rows:
+        out["table"].append(
+            {
+                "title": r.get("title", ""),
+                "company": r.get("company", ""),
+                "location": r.get("location", ""),
+                "salary_min": smin,
+                "salary_max": smax or "",
+            }
+        )
     return out
 
 
-def _work_mode(df: pd.DataFrame) -> dict:
-    wdf = df.copy()
-    if "work_mode" not in wdf.columns:
-        wdf["work_mode"] = wdf["location"].apply(
-            lambda loc: "Remote" if "remote" in str(loc).lower() or "worldwide" in str(loc).lower() else "Onsite"
-        )
+def _work_mode(rows: list[dict]) -> dict:
+    def classify(r: dict) -> str:
+        wm = r.get("work_mode", "")
+        if wm:
+            return wm
+        loc = str(r.get("location", "")).lower()
+        return "Remote" if ("remote" in loc or "worldwide" in loc) else "Onsite"
 
-    mode_counts = wdf["work_mode"].value_counts()
-    split = [{"mode": m, "count": int(c)} for m, c in mode_counts.items()]
+    mode_ctr = Counter(classify(r) for r in rows)
+    split = [{"mode": m, "count": c} for m, c in mode_ctr.most_common()]
 
-    remote_locs = []
-    ro = wdf[wdf["work_mode"] == "Remote"]
-    if not ro.empty:
-        rl = ro["location"].value_counts().head(12)
-        remote_locs = [{"name": str(loc), "count": int(cnt)} for loc, cnt in rl.items()]
+    remote_rows = [r for r in rows if classify(r) == "Remote"]
+    loc_ctr = Counter(r.get("location") for r in remote_rows if r.get("location"))
+    remote_locs = [{"name": k, "count": v} for k, v in loc_ctr.most_common(12)]
 
     return {"split": split, "remote_locations": remote_locs}

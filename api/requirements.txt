@@ -1,3 +1,1 @@
 fastapi>=0.111
-pandas>=1.5
-numpy>=1.22
