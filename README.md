@@ -157,6 +157,24 @@ Notes:
 
 ---
 
+### Run dashboard locally
+
+1. Create a local environment file in the project root:
+   ```env
+   NEXT_PUBLIC_AIRFLOW_API_URL=http://localhost:8080/api/v1
+   ```
+2. Start Airflow locally:
+   ```bash
+   airflow standalone
+   ```
+3. Start the dashboard frontend:
+   ```bash
+   cd dashboard/frontend
+   npm run dev
+   ```
+
+---
+
 ### Vercel deploy checklist (Airflow-enabled)
 
 1. Import repo in Vercel.

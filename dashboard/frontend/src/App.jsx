@@ -69,7 +69,9 @@ export default function App() {
       setAirflowLoading(true);
       const result = await fetchAirflowOverview();
       if (result.configured && result.error) {
-        throw new Error(result.error);
+        const wrapped = new Error(result.error);
+        wrapped.source = result.source || "proxy";
+        throw wrapped;
       } else {
         setAirflowError(null);
       }
@@ -80,8 +82,14 @@ export default function App() {
       airflowPausedUntilRef.current = 0;
     } catch (err) {
       airflowFailureRef.current += 1;
+      setAirflow((prev) => ({
+        ...(prev || {}),
+        source: err?.source || prev?.source || "unknown",
+      }));
 
-      const baseMessage = "Airflow API is currently unreachable. Ensure the Airflow server is running.";
+      const baseMessage = err?.message
+        ? `Airflow API is unreachable. ${err.message}`
+        : "Airflow API is unreachable. Ensure the Airflow server is running and the API URL is correct.";
       if (airflowFailureRef.current >= AIRFLOW_MAX_FAILURES) {
         airflowPausedUntilRef.current = Date.now() + AIRFLOW_COOLDOWN_MS;
         setAirflowCooldownSeconds(Math.ceil(AIRFLOW_COOLDOWN_MS / 1000));

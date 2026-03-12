@@ -80,14 +80,20 @@ def _airflow_base_urls() -> list[str]:
     explicit = os.getenv("AIRFLOW_API_BASE_URL", "").strip()
     if explicit:
         return [_normalize_airflow_url(explicit)]
-    # Zero-config deploy behavior:
-    # If no Airflow URL is explicitly configured, mark integration as disabled.
+    # Local developer default:
+    # if no env var is set, use local Airflow endpoint during non-production runs.
+    if not os.getenv("VERCEL") and os.getenv("ENV", "").lower() != "production":
+        return ["http://localhost:8080/api/v1"]
+    # In hosted/prod contexts, keep Airflow integration opt-in.
     return []
 
 
 def _airflow_request(path: str, params: dict | None = None) -> dict:
     username = os.getenv("AIRFLOW_USERNAME", "").strip()
     password = os.getenv("AIRFLOW_PASSWORD", "").strip()
+    if not username and not os.getenv("VERCEL") and os.getenv("ENV", "").lower() != "production":
+        username = "admin"
+        password = password or "admin"
     timeout = int(os.getenv("AIRFLOW_TIMEOUT_SECONDS", "10"))
     errors: list[str] = []
 
@@ -135,7 +141,7 @@ def reload_data():
 
 @app.get("/api/airflow/health")
 def airflow_health():
-    if not os.getenv("AIRFLOW_API_BASE_URL", "").strip():
+    if not _airflow_base_urls():
         return {
             "reachable": False,
             "configured": False,
@@ -156,7 +162,7 @@ def airflow_health():
 
 @app.get("/api/airflow/overview")
 def airflow_overview(dag_id: str = "job_market_pipeline", runs_limit: int = 5):
-    if not os.getenv("AIRFLOW_API_BASE_URL", "").strip():
+    if not _airflow_base_urls():
         return {
             "reachable": False,
             "configured": False,
