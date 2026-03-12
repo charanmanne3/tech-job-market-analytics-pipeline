@@ -2,11 +2,6 @@
   "buildCommand": "cd dashboard/frontend && npm install && npm run build",
   "outputDirectory": "dashboard/frontend/dist",
   "framework": null,
-  "functions": {
-    "api/index.py": {
-      "runtime": "@vercel/python@4"
-    }
-  },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index" },
     { "source": "/(.*)", "destination": "/index.html" }
