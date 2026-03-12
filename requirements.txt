@@ -1,13 +1,1 @@
-# Core
-pandas>=1.5
-pyarrow>=10.0
-requests>=2.28
-numpy>=1.22
-
-# Database
-sqlalchemy>=1.4
-psycopg2-binary>=2.9
-
-# API
 fastapi>=0.111
-uvicorn>=0.30
