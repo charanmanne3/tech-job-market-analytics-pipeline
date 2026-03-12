@@ -78,14 +78,17 @@ def _normalize_airflow_url(raw: str) -> str:
 
 def _airflow_base_urls() -> list[str]:
     explicit = os.getenv("AIRFLOW_API_BASE_URL", "").strip()
+    urls: list[str] = []
     if explicit:
-        return [_normalize_airflow_url(explicit)]
+        urls.append(_normalize_airflow_url(explicit))
     # Local developer default:
     # if no env var is set, use local Airflow endpoint during non-production runs.
     if not os.getenv("VERCEL") and os.getenv("ENV", "").lower() != "production":
-        return ["http://localhost:8080/api/v1"]
+        local_default = "http://localhost:8080/api/v1"
+        if local_default not in urls:
+            urls.append(local_default)
     # In hosted/prod contexts, keep Airflow integration opt-in.
-    return []
+    return urls
 
 
 def _airflow_request(path: str, params: dict | None = None) -> dict:
