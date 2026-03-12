@@ -86,7 +86,11 @@ export default function AirflowSection({
           </div>
         </div>
       ) : (
-        <div className="text-slate-400 text-sm">Airflow is not reachable from this environment.</div>
+        <div className="text-slate-400 text-sm">
+          {airflow?.configured === false
+            ? "Airflow not configured for this deployment. App works without it."
+            : airflow?.error || "Airflow is not reachable from this environment."}
+        </div>
       )}
     </section>
   );

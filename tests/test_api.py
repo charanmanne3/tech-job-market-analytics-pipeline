@@ -99,6 +99,8 @@ def test_reload_endpoint():
 def test_airflow_overview_endpoint(monkeypatch):
     import dashboard.api.main as api_mod
 
+    monkeypatch.setenv("AIRFLOW_API_BASE_URL", "http://airflow.test/api/v1")
+
     def fake_airflow_request(path, params=None):
         if path == "/dags/job_market_pipeline":
             return {
@@ -137,6 +139,7 @@ def test_airflow_overview_endpoint(monkeypatch):
 def test_airflow_health_unreachable(monkeypatch):
     import dashboard.api.main as api_mod
 
+    monkeypatch.setenv("AIRFLOW_API_BASE_URL", "http://airflow.test/api/v1")
     monkeypatch.setattr(api_mod, "_airflow_request", lambda *args, **kwargs: {"_error": "connection refused"})
     resp = client.get("/api/airflow/health")
     assert resp.status_code == 200

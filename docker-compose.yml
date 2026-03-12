@@ -81,6 +81,9 @@ services:
     container_name: jm_dashboard
     environment:
       <<: *common-env
+      AIRFLOW_API_BASE_URL: http://airflow:8080/api/v1
+      AIRFLOW_USERNAME: admin
+      AIRFLOW_PASSWORD: admin
     ports:
       - "8501:8501"
     volumes:

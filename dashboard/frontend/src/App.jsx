@@ -56,7 +56,7 @@ export default function App() {
     try {
       setAirflowLoading(true);
       const result = await fetchAirflowOverview();
-      if (result.error) {
+      if (result.configured && result.error) {
         setAirflowError(result.error);
       } else {
         setAirflowError(null);

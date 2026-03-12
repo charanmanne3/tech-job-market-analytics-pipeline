@@ -70,31 +70,45 @@ def _get_data() -> pd.DataFrame:
     return _cached_df.copy()
 
 
-def _airflow_base_url() -> str:
-    raw = os.getenv("AIRFLOW_API_BASE_URL", "http://localhost:8080/api/v1").strip().rstrip("/")
-    if raw.endswith("/api/v1"):
-        return raw
-    return f"{raw}/api/v1"
+def _normalize_airflow_url(raw: str) -> str:
+    cleaned = raw.strip().rstrip("/")
+    if cleaned.endswith("/api/v1"):
+        return cleaned
+    return f"{cleaned}/api/v1"
+
+
+def _airflow_base_urls() -> list[str]:
+    explicit = os.getenv("AIRFLOW_API_BASE_URL", "").strip()
+    if explicit:
+        return [_normalize_airflow_url(explicit)]
+    # Zero-config deploy behavior:
+    # If no Airflow URL is explicitly configured, mark integration as disabled.
+    return []
 
 
 def _airflow_request(path: str, params: dict | None = None) -> dict:
-    url = f"{_airflow_base_url()}/{path.lstrip('/')}"
-    if params:
-        url = f"{url}?{urlencode(params, doseq=True)}"
-
-    req = Request(url)
     username = os.getenv("AIRFLOW_USERNAME", "").strip()
     password = os.getenv("AIRFLOW_PASSWORD", "").strip()
-    if username:
-        token = base64.b64encode(f"{username}:{password}".encode()).decode("utf-8")
-        req.add_header("Authorization", f"Basic {token}")
+    timeout = int(os.getenv("AIRFLOW_TIMEOUT_SECONDS", "10"))
+    errors: list[str] = []
 
-    try:
-        timeout = int(os.getenv("AIRFLOW_TIMEOUT_SECONDS", "10"))
-        with urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except (URLError, TimeoutError, ValueError, json.JSONDecodeError) as exc:
-        return {"_error": str(exc)}
+    for base in _airflow_base_urls():
+        url = f"{base}/{path.lstrip('/')}"
+        if params:
+            url = f"{url}?{urlencode(params, doseq=True)}"
+
+        req = Request(url)
+        if username:
+            token = base64.b64encode(f"{username}:{password}".encode()).decode("utf-8")
+            req.add_header("Authorization", f"Basic {token}")
+
+        try:
+            with urlopen(req, timeout=timeout) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except (URLError, TimeoutError, ValueError, json.JSONDecodeError) as exc:
+            errors.append(f"{base}: {exc}")
+
+    return {"_error": " | ".join(errors)}
 
 
 def _duration_seconds(start_date: str | None, end_date: str | None) -> float | None:
@@ -117,11 +131,18 @@ def reload_data():
 
 @app.get("/api/airflow/health")
 def airflow_health():
+    if not os.getenv("AIRFLOW_API_BASE_URL", "").strip():
+        return {
+            "reachable": False,
+            "configured": False,
+            "message": "Airflow integration not configured. Set AIRFLOW_API_BASE_URL to enable.",
+        }
     payload = _airflow_request("/health")
     if "_error" in payload:
-        return {"reachable": False, "error": payload["_error"]}
+        return {"reachable": False, "configured": True, "error": payload["_error"]}
     return {
         "reachable": True,
+        "configured": True,
         "metadatabase": payload.get("metadatabase", {}),
         "scheduler": payload.get("scheduler", {}),
         "triggerer": payload.get("triggerer", {}),
@@ -131,6 +152,14 @@ def airflow_health():
 
 @app.get("/api/airflow/overview")
 def airflow_overview(dag_id: str = "job_market_pipeline", runs_limit: int = 5):
+    if not os.getenv("AIRFLOW_API_BASE_URL", "").strip():
+        return {
+            "reachable": False,
+            "configured": False,
+            "dag_id": dag_id,
+            "message": "Airflow integration not configured. Set AIRFLOW_API_BASE_URL to enable.",
+        }
+
     dag = _airflow_request(f"/dags/{dag_id}")
     runs = _airflow_request(
         f"/dags/{dag_id}/dagRuns",
@@ -140,7 +169,7 @@ def airflow_overview(dag_id: str = "job_market_pipeline", runs_limit: int = 5):
 
     errors = [v.get("_error") for v in (dag, runs, tasks) if "_error" in v]
     if errors:
-        return {"reachable": False, "error": "; ".join(errors), "dag_id": dag_id}
+        return {"reachable": False, "configured": True, "error": "; ".join(errors), "dag_id": dag_id}
 
     dag_runs = runs.get("dag_runs", [])
     formatted_runs = [
@@ -164,6 +193,7 @@ def airflow_overview(dag_id: str = "job_market_pipeline", runs_limit: int = 5):
 
     return {
         "reachable": True,
+        "configured": True,
         "dag": {
             "dag_id": dag.get("dag_id", dag_id),
             "is_paused": dag.get("is_paused"),
