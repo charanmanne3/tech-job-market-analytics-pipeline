@@ -46,7 +46,7 @@ _cached_rows: list[dict] | None = None
 
 def _load_data() -> list[dict]:
     for p in _CSV_PATHS:
-        if p.exists():
+        if p.is_file():
             with open(p, newline="", encoding="utf-8") as f:
                 return list(csv.DictReader(f))
     return []

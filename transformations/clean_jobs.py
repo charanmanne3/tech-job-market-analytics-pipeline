@@ -12,6 +12,7 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import (
     coalesce,
     col,
+    concat,
     countDistinct,
     greatest,
     initcap,
@@ -36,7 +37,19 @@ from utils.logger import get_logger
 
 logger = get_logger("transform.clean_jobs")
 
-spark = SparkSession.builder.appName("TechJobPipeline").getOrCreate()
+spark: SparkSession | None = None
+
+
+def get_spark() -> SparkSession:
+    """
+    Lazily create SparkSession on the driver only.
+    Avoid creating SparkContext at module import time because this module is also
+    imported inside Spark Python workers for UDF execution.
+    """
+    global spark
+    if spark is None:
+        spark = SparkSession.builder.appName("TechJobPipeline").getOrCreate()
+    return spark
 
 
 def _ensure_columns(df: DataFrame, columns: list[str]) -> DataFrame:
@@ -48,15 +61,16 @@ def _ensure_columns(df: DataFrame, columns: list[str]) -> DataFrame:
 
 def load_raw_data() -> DataFrame:
     """Load raw data — prefer Parquet, fall back to CSV."""
+    current_spark = get_spark()
     if RAW_PARQUET_PATH.exists():
         logger.info("Loading raw Parquet from %s", RAW_PARQUET_PATH)
-        df = spark.read.parquet(str(RAW_PARQUET_PATH))
+        df = current_spark.read.parquet(str(RAW_PARQUET_PATH))
     elif RAW_CSV_PATH.exists():
         logger.info("Parquet not found; loading CSV from %s", RAW_CSV_PATH)
-        df = spark.read.csv(str(RAW_CSV_PATH), header=True)
+        df = current_spark.read.csv(str(RAW_CSV_PATH), header=True)
     else:
         logger.error("No raw data found in %s", RAW_PARQUET_PATH.parent)
-        return spark.createDataFrame([], schema="job_id string")
+        return current_spark.createDataFrame([], schema="job_id string")
 
     df = _ensure_columns(
         df,
@@ -171,8 +185,10 @@ def parse_dates(df: DataFrame) -> DataFrame:
 
 def parse_salaries(df: DataFrame) -> DataFrame:
     cleaned_salary = regexp_replace(coalesce(col("salary"), lit("")), ",", "")
-    n1 = regexp_extract(cleaned_salary, r"(\d+\.?\d*)", 1).cast("double")
-    n2 = regexp_extract(cleaned_salary, r"\d+\.?\d*\D+(\d+\.?\d*)", 1).cast("double")
+    n1_raw = regexp_extract(cleaned_salary, r"(\d+\.?\d*)", 1)
+    n2_raw = regexp_extract(cleaned_salary, r"\d+\.?\d*\D+(\d+\.?\d*)", 1)
+    n1 = when(length(n1_raw) > 0, n1_raw.cast("double")).otherwise(lit(None))
+    n2 = when(length(n2_raw) > 0, n2_raw.cast("double")).otherwise(lit(None))
 
     df = df.withColumn("n1", n1).withColumn("n2", n2)
     hi_raw = greatest(coalesce(col("n1"), lit(0.0)), coalesce(col("n2"), lit(0.0)))
@@ -227,7 +243,7 @@ skill_count_udf = udf(lambda s: len(s.split(", ")) if s else 0, IntegerType())
 
 
 def extract_skills(df: DataFrame) -> DataFrame:
-    combined = coalesce(col("description"), lit("")) + lit(" ") + coalesce(col("tags"), lit(""))
+    combined = concat(coalesce(col("description"), lit("")), lit(" "), coalesce(col("tags"), lit("")))
     df = df.withColumn("skills", extract_skills_udf(combined))
     df = df.withColumn("skill_count", skill_count_udf(col("skills")))
     return df

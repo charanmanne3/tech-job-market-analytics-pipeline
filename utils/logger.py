@@ -25,6 +25,18 @@ LOG_DATE_FMT = "%Y-%m-%d %H:%M:%S"
 _CONFIGURED = False
 
 
+def _in_airflow_task_context() -> bool:
+    """Detect execution inside an Airflow task runtime."""
+    return any(
+        os.getenv(k)
+        for k in (
+            "AIRFLOW_CTX_DAG_ID",
+            "AIRFLOW_CTX_TASK_ID",
+            "AIRFLOW_CTX_RUN_ID",
+        )
+    )
+
+
 def _configure_root() -> None:
     """One-time setup of the root logger (console + rotating file)."""
     global _CONFIGURED
@@ -36,9 +48,12 @@ def _configure_root() -> None:
 
     formatter = logging.Formatter(LOG_FORMAT, datefmt=LOG_DATE_FMT)
 
-    console = logging.StreamHandler(sys.stdout)
-    console.setFormatter(formatter)
-    root.addHandler(console)
+    # Airflow task runtime wraps stdout/stderr and forwards logs internally.
+    # Attaching another stdout handler here can create recursive log emission.
+    if not _in_airflow_task_context():
+        console = logging.StreamHandler(sys.stdout)
+        console.setFormatter(formatter)
+        root.addHandler(console)
 
     file_handler = logging.FileHandler(LOG_DIR / "pipeline.log", encoding="utf-8")
     file_handler.setFormatter(formatter)

@@ -24,18 +24,25 @@ default_args = {
 }
 
 
+def _row_count(df) -> int:
+    """Return row count for pandas or Spark DataFrames."""
+    if hasattr(df, "count") and callable(df.count) and not hasattr(df, "__len__"):
+        return int(df.count())
+    return int(len(df))
+
+
 def _extract(**ctx):
     from data_ingestion.fetch_jobs import run_ingestion
 
     df = run_ingestion()
-    ctx["ti"].xcom_push(key="raw_count", value=len(df))
+    ctx["ti"].xcom_push(key="raw_count", value=_row_count(df))
 
 
 def _transform(**ctx):
     from transformations.clean_jobs import run_cleaning
 
     df = run_cleaning()
-    ctx["ti"].xcom_push(key="clean_count", value=len(df))
+    ctx["ti"].xcom_push(key="clean_count", value=_row_count(df))
 
 
 def _load(**ctx):

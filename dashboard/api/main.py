@@ -43,12 +43,12 @@ _cached_df: pd.DataFrame | None = None
 
 def _load_data() -> pd.DataFrame:
     """Parquet -> CSV -> PostgreSQL fallback chain."""
-    if PROCESSED_PARQUET_PATH.exists():
+    if PROCESSED_PARQUET_PATH.is_file():
         try:
             return pd.read_parquet(PROCESSED_PARQUET_PATH)
         except ImportError:
             pass
-    if CLEAN_CSV_PATH.exists():
+    if CLEAN_CSV_PATH.is_file():
         return pd.read_csv(CLEAN_CSV_PATH)
     try:
         from sqlalchemy import create_engine, text
