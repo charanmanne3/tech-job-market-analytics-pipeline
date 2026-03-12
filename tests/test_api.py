@@ -94,3 +94,52 @@ def test_reload_endpoint():
     resp = client.post("/api/reload")
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"
+
+
+def test_airflow_overview_endpoint(monkeypatch):
+    import dashboard.api.main as api_mod
+
+    def fake_airflow_request(path, params=None):
+        if path == "/dags/job_market_pipeline":
+            return {
+                "dag_id": "job_market_pipeline",
+                "is_paused": False,
+                "is_active": True,
+                "tags": [{"name": "etl"}],
+            }
+        if path == "/dags/job_market_pipeline/dagRuns":
+            return {
+                "dag_runs": [
+                    {
+                        "dag_run_id": "manual__2025-03-01T00:00:00+00:00",
+                        "state": "success",
+                        "run_type": "manual",
+                        "logical_date": "2025-03-01T00:00:00+00:00",
+                        "start_date": "2025-03-01T00:00:00+00:00",
+                        "end_date": "2025-03-01T00:01:00+00:00",
+                    }
+                ]
+            }
+        if path == "/dags/job_market_pipeline/tasks":
+            return {"tasks": [{"task_id": "extract_jobs"}, {"task_id": "transform_jobs"}]}
+        return {}
+
+    monkeypatch.setattr(api_mod, "_airflow_request", fake_airflow_request)
+    resp = client.get("/api/airflow/overview")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["reachable"] is True
+    assert body["dag"]["dag_id"] == "job_market_pipeline"
+    assert body["task_count"] == 2
+    assert body["run_summary"]["success"] == 1
+
+
+def test_airflow_health_unreachable(monkeypatch):
+    import dashboard.api.main as api_mod
+
+    monkeypatch.setattr(api_mod, "_airflow_request", lambda *args, **kwargs: {"_error": "connection refused"})
+    resp = client.get("/api/airflow/health")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["reachable"] is False
+    assert "error" in body

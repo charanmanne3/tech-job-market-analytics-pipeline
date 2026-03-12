@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { fetchDashboard, fetchFilters } from "./api";
+import { fetchAirflowOverview, fetchDashboard, fetchFilters } from "./api";
+import AirflowSection from "./components/AirflowSection";
 import MetricCards from "./components/MetricCards";
 import LocationCharts from "./components/LocationCharts";
 import SkillsSection from "./components/SkillsSection";
@@ -15,6 +16,11 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [airflow, setAirflow] = useState(null);
+  const [airflowLoading, setAirflowLoading] = useState(true);
+  const [airflowError, setAirflowError] = useState(null);
+  const [airflowLastUpdated, setAirflowLastUpdated] = useState(null);
+  const AIRFLOW_REFRESH_MS = 30_000;
 
   const loadData = useCallback(async () => {
     try {
@@ -45,6 +51,35 @@ export default function App() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const loadAirflow = useCallback(async () => {
+    try {
+      setAirflowLoading(true);
+      const result = await fetchAirflowOverview();
+      if (result.error) {
+        setAirflowError(result.error);
+      } else {
+        setAirflowError(null);
+      }
+      setAirflow(result);
+      setAirflowLastUpdated(new Date());
+    } catch (err) {
+      setAirflowError(err.message);
+    } finally {
+      setAirflowLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAirflow();
+  }, [loadAirflow]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      loadAirflow();
+    }, AIRFLOW_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [loadAirflow]);
 
   if (error) {
     return (
@@ -119,6 +154,14 @@ export default function App() {
         ) : data ? (
           <div className="space-y-12">
             <MetricCards metrics={data.metrics} />
+            <AirflowSection
+              airflow={airflow}
+              loading={airflowLoading}
+              error={airflowError}
+              onRefresh={loadAirflow}
+              lastUpdated={airflowLastUpdated}
+              refreshMs={AIRFLOW_REFRESH_MS}
+            />
             <LocationCharts
               locations={data.top_locations}
               companies={data.top_companies}

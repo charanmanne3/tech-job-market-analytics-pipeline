@@ -16,3 +16,13 @@ export async function fetchFilters() {
   if (!res.ok) throw new Error("Failed to fetch filters");
   return res.json();
 }
+
+export async function fetchAirflowOverview({ dagId = "job_market_pipeline", runsLimit = 5 } = {}) {
+  const url = new URL(`${BASE}/airflow/overview`, window.location.origin);
+  url.searchParams.set("dag_id", dagId);
+  url.searchParams.set("runs_limit", String(runsLimit));
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Failed to fetch Airflow data");
+  return res.json();
+}

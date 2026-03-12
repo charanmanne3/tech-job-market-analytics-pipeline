@@ -7,12 +7,19 @@ to stay well under Vercel's 250 MB Lambda limit.
 
 from __future__ import annotations
 
+import base64
 import csv
+import json
 import math
+import os
 from collections import Counter
+from datetime import datetime
 from itertools import combinations
 from pathlib import Path
 from statistics import mean, median
+from urllib.error import URLError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -62,6 +69,44 @@ def _safe_float(val: str | None) -> float | None:
         return None
 
 
+def _airflow_base_url() -> str:
+    raw = os.getenv("AIRFLOW_API_BASE_URL", "http://localhost:8080/api/v1").strip().rstrip("/")
+    if raw.endswith("/api/v1"):
+        return raw
+    return f"{raw}/api/v1"
+
+
+def _airflow_request(path: str, params: dict | None = None) -> dict:
+    url = f"{_airflow_base_url()}/{path.lstrip('/')}"
+    if params:
+        url = f"{url}?{urlencode(params, doseq=True)}"
+
+    req = Request(url)
+    username = os.getenv("AIRFLOW_USERNAME", "").strip()
+    password = os.getenv("AIRFLOW_PASSWORD", "").strip()
+    if username:
+        token = base64.b64encode(f"{username}:{password}".encode()).decode("utf-8")
+        req.add_header("Authorization", f"Basic {token}")
+
+    try:
+        timeout = int(os.getenv("AIRFLOW_TIMEOUT_SECONDS", "10"))
+        with urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except (URLError, TimeoutError, ValueError, json.JSONDecodeError) as exc:
+        return {"_error": str(exc)}
+
+
+def _duration_seconds(start_date: str | None, end_date: str | None) -> float | None:
+    if not start_date or not end_date:
+        return None
+    try:
+        start = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+        end = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+        return round((end - start).total_seconds(), 1)
+    except ValueError:
+        return None
+
+
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
 
@@ -70,6 +115,70 @@ def reload_data():
     global _cached_rows
     _cached_rows = None
     return {"status": "ok"}
+
+
+@app.get("/api/airflow/health")
+def airflow_health():
+    payload = _airflow_request("/health")
+    if "_error" in payload:
+        return {"reachable": False, "error": payload["_error"]}
+    return {
+        "reachable": True,
+        "metadatabase": payload.get("metadatabase", {}),
+        "scheduler": payload.get("scheduler", {}),
+        "triggerer": payload.get("triggerer", {}),
+        "dag_processor": payload.get("dag_processor", {}),
+    }
+
+
+@app.get("/api/airflow/overview")
+def airflow_overview(dag_id: str = "job_market_pipeline", runs_limit: int = 5):
+    dag = _airflow_request(f"/dags/{dag_id}")
+    runs = _airflow_request(
+        f"/dags/{dag_id}/dagRuns",
+        {"order_by": "-start_date", "limit": max(1, min(runs_limit, 20))},
+    )
+    tasks = _airflow_request(f"/dags/{dag_id}/tasks")
+
+    errors = [v.get("_error") for v in (dag, runs, tasks) if "_error" in v]
+    if errors:
+        return {"reachable": False, "error": "; ".join(errors), "dag_id": dag_id}
+
+    dag_runs = runs.get("dag_runs", [])
+    formatted_runs = [
+        {
+            "dag_run_id": run.get("dag_run_id"),
+            "state": run.get("state"),
+            "run_type": run.get("run_type"),
+            "logical_date": run.get("logical_date"),
+            "start_date": run.get("start_date"),
+            "end_date": run.get("end_date"),
+            "duration_seconds": _duration_seconds(run.get("start_date"), run.get("end_date")),
+        }
+        for run in dag_runs
+    ]
+
+    task_list = tasks.get("tasks", [])
+    state_counts: dict[str, int] = {}
+    for run in dag_runs:
+        state = run.get("state", "unknown")
+        state_counts[state] = state_counts.get(state, 0) + 1
+
+    return {
+        "reachable": True,
+        "dag": {
+            "dag_id": dag.get("dag_id", dag_id),
+            "is_paused": dag.get("is_paused"),
+            "is_active": dag.get("is_active"),
+            "description": dag.get("description"),
+            "owners": dag.get("owners", []),
+            "tags": [tag.get("name") for tag in dag.get("tags", []) if isinstance(tag, dict)],
+        },
+        "run_summary": state_counts,
+        "recent_runs": formatted_runs,
+        "task_count": len(task_list),
+        "task_ids": [task.get("task_id") for task in task_list if task.get("task_id")],
+    }
 
 
 @app.get("/api/filters")
