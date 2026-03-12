@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { fetchAirflowOverview, fetchDashboard, fetchFilters } from "./api";
 import AirflowSection from "./components/AirflowSection";
 import MetricCards from "./components/MetricCards";
@@ -20,7 +20,12 @@ export default function App() {
   const [airflowLoading, setAirflowLoading] = useState(true);
   const [airflowError, setAirflowError] = useState(null);
   const [airflowLastUpdated, setAirflowLastUpdated] = useState(null);
+  const [airflowCooldownSeconds, setAirflowCooldownSeconds] = useState(0);
   const AIRFLOW_REFRESH_MS = 30_000;
+  const AIRFLOW_MAX_FAILURES = 3;
+  const AIRFLOW_COOLDOWN_MS = 120_000;
+  const airflowFailureRef = useRef(0);
+  const airflowPausedUntilRef = useRef(0);
 
   const loadData = useCallback(async () => {
     try {
@@ -52,19 +57,38 @@ export default function App() {
     loadData();
   }, [loadData]);
 
-  const loadAirflow = useCallback(async () => {
+  const loadAirflow = useCallback(async ({ manual = false } = {}) => {
+    const now = Date.now();
+    if (!manual && airflowPausedUntilRef.current > now) {
+      const sec = Math.ceil((airflowPausedUntilRef.current - now) / 1000);
+      setAirflowCooldownSeconds(sec);
+      return;
+    }
+
     try {
       setAirflowLoading(true);
       const result = await fetchAirflowOverview();
       if (result.configured && result.error) {
-        setAirflowError(result.error);
+        throw new Error(result.error);
       } else {
         setAirflowError(null);
       }
       setAirflow(result);
       setAirflowLastUpdated(new Date());
+      setAirflowCooldownSeconds(0);
+      airflowFailureRef.current = 0;
+      airflowPausedUntilRef.current = 0;
     } catch (err) {
-      setAirflowError(err.message);
+      airflowFailureRef.current += 1;
+
+      const baseMessage = "Airflow API is currently unreachable. Ensure the Airflow server is running.";
+      if (airflowFailureRef.current >= AIRFLOW_MAX_FAILURES) {
+        airflowPausedUntilRef.current = Date.now() + AIRFLOW_COOLDOWN_MS;
+        setAirflowCooldownSeconds(Math.ceil(AIRFLOW_COOLDOWN_MS / 1000));
+        setAirflowError(`${baseMessage} Auto-retry paused briefly to avoid spam.`);
+      } else {
+        setAirflowError(baseMessage);
+      }
     } finally {
       setAirflowLoading(false);
     }
@@ -76,7 +100,13 @@ export default function App() {
 
   useEffect(() => {
     const timer = setInterval(() => {
-      loadAirflow();
+      const now = Date.now();
+      if (airflowPausedUntilRef.current > now) {
+        setAirflowCooldownSeconds(Math.ceil((airflowPausedUntilRef.current - now) / 1000));
+      } else {
+        setAirflowCooldownSeconds(0);
+        loadAirflow();
+      }
     }, AIRFLOW_REFRESH_MS);
     return () => clearInterval(timer);
   }, [loadAirflow]);
@@ -158,9 +188,10 @@ export default function App() {
               airflow={airflow}
               loading={airflowLoading}
               error={airflowError}
-              onRefresh={loadAirflow}
+              onRefresh={() => loadAirflow({ manual: true })}
               lastUpdated={airflowLastUpdated}
               refreshMs={AIRFLOW_REFRESH_MS}
+              cooldownSeconds={airflowCooldownSeconds}
             />
             <LocationCharts
               locations={data.top_locations}

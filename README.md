@@ -134,6 +134,44 @@ cd tech-job-market-analytics-pipeline
 
 ---
 
+## Airflow API Configuration
+
+The dashboard Airflow panel supports a configurable API base URL so you do not
+need to rely on temporary tunnel links.
+
+Set this environment variable for the frontend deployment:
+
+```env
+NEXT_PUBLIC_AIRFLOW_API_URL=https://your-airflow-server/api/v1
+```
+
+Notes:
+
+* If `NEXT_PUBLIC_AIRFLOW_API_URL` is set, the dashboard attempts direct Airflow
+  API calls (DAG metadata and DAG runs).
+* If direct access fails (CORS/network), the app falls back to backend proxy
+  endpoints.
+* If Airflow remains unreachable, the UI shows a friendly message and enters a
+  short cooldown to avoid repeated failing requests while continuing the 30s
+  refresh cycle.
+
+---
+
+### Vercel deploy checklist (Airflow-enabled)
+
+1. Import repo in Vercel.
+2. In **Project Settings → Environment Variables**, set:
+   * `NEXT_PUBLIC_AIRFLOW_API_URL=https://your-airflow-server/api/v1`
+   * `AIRFLOW_API_BASE_URL=https://your-airflow-server/api/v1` (backend proxy fallback)
+   * `AIRFLOW_USERNAME=<airflow-user>`
+   * `AIRFLOW_PASSWORD=<airflow-password>`
+3. Redeploy.
+4. Open `/api/airflow/health` on your deployed URL to verify connectivity.
+
+If you skip these vars, the dashboard still works and Airflow panel stays optional.
+
+---
+
 ### 2. Start the pipeline
 
 ```

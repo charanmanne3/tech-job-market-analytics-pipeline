@@ -8,6 +8,12 @@ function badgeClass(state) {
   return "bg-slate-700/40 text-slate-300 border-slate-600/50";
 }
 
+function sourceBadgeClass(source) {
+  if (source === "direct") return "bg-emerald-500/20 text-emerald-300 border-emerald-500/40";
+  if (source === "proxy") return "bg-violet-500/20 text-violet-300 border-violet-500/40";
+  return "bg-slate-700/40 text-slate-300 border-slate-600/50";
+}
+
 export default function AirflowSection({
   airflow,
   loading,
@@ -15,6 +21,7 @@ export default function AirflowSection({
   onRefresh,
   lastUpdated,
   refreshMs = 30000,
+  cooldownSeconds = 0,
 }) {
   const refreshedLabel = lastUpdated ? new Date(lastUpdated).toLocaleTimeString() : "never";
   const refreshSeconds = Math.round((refreshMs || 0) / 1000);
@@ -26,19 +33,27 @@ export default function AirflowSection({
           title="Airflow Pipeline Status"
           subtitle={`Live DAG metadata and recent run states from Airflow API · Auto-refresh ${refreshSeconds}s · Last updated ${refreshedLabel}`}
         />
-        <button
-          onClick={onRefresh}
-          className="px-3 py-2 rounded-lg text-sm bg-slate-800 border border-slate-700 hover:bg-slate-700 transition"
-        >
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <span className={`px-2 py-1 rounded border text-xs ${sourceBadgeClass(airflow?.source)}`}>
+            Source: {airflow?.source || "unknown"}
+          </span>
+          <button
+            onClick={onRefresh}
+            className="px-3 py-2 rounded-lg text-sm bg-slate-800 border border-slate-700 hover:bg-slate-700 transition"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       {loading ? (
         <div className="text-slate-400 text-sm">Loading Airflow status...</div>
       ) : error ? (
         <div className="text-rose-300 text-sm bg-rose-500/10 border border-rose-500/30 rounded-lg p-3">
-          Unable to reach Airflow: {error}
+          {error}
+          {cooldownSeconds > 0 ? (
+            <div className="mt-1 text-xs text-rose-200/90">Retrying automatically in ~{cooldownSeconds}s.</div>
+          ) : null}
         </div>
       ) : airflow && airflow.reachable ? (
         <div className="space-y-5">
