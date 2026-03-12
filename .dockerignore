@@ -18,4 +18,5 @@ data/processed/
 data/analytics/
 *.md
 .dockerignore
-docker/
+dashboard/frontend/node_modules/
+dashboard/frontend/dist/

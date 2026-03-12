@@ -73,12 +73,12 @@ services:
         airflow webserver
       "
 
-  # ── Streamlit Dashboard ─────────────────────────────────────────────────────
-  streamlit:
+  # ── React Dashboard (FastAPI + static build) ────────────────────────────────
+  dashboard:
     build:
       context: .
       dockerfile: docker/Dockerfile.app
-    container_name: jm_streamlit
+    container_name: jm_dashboard
     environment:
       <<: *common-env
     ports:
@@ -88,7 +88,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: streamlit run dashboard/streamlit_app.py --server.address 0.0.0.0
 
 volumes:
   pgdata:
