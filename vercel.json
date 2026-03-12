@@ -2,6 +2,11 @@
   "buildCommand": "cd dashboard/frontend && npm install && npm run build",
   "outputDirectory": "dashboard/frontend/dist",
   "framework": null,
+  "functions": {
+    "api/index.py": {
+      "includeFiles": "api/**"
+    }
+  },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index" },
     { "source": "/(.*)", "destination": "/index.html" }
