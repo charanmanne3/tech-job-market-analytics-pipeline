@@ -37,7 +37,10 @@ _cached_df: pd.DataFrame | None = None
 def _load_data() -> pd.DataFrame:
     """Parquet -> CSV -> PostgreSQL fallback chain."""
     if PROCESSED_PARQUET_PATH.exists():
-        return pd.read_parquet(PROCESSED_PARQUET_PATH)
+        try:
+            return pd.read_parquet(PROCESSED_PARQUET_PATH)
+        except ImportError:
+            pass
     if CLEAN_CSV_PATH.exists():
         return pd.read_csv(CLEAN_CSV_PATH)
     try:
